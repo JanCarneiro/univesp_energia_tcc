@@ -1,15 +1,12 @@
 import findspark
 from pyspark.sql import SparkSession
 
-
-
 findspark.init("/home/jan/spark/spark-3.5.5-bin-hadoop3")
 
 class CriarConn():
     def __init__(self, name_app):
 
         self.name_app = name_app
-        # self.spark = None
 
     def cria_conn(self):
         
@@ -18,5 +15,5 @@ class CriarConn():
             .master("local[*]") \
             .getOrCreate()
         
-        display(self.spark)
+        #display(self.spark)
         return self.spark
