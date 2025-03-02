@@ -12,6 +12,8 @@ class CriarConn():
         
         self.spark = SparkSession.builder \
             .appName(self.name_app) \
+            .config("spark.driver.memory", "16g") \
+            .config("spark.executor.memory", "16g") \
             .master("local[*]") \
             .getOrCreate()
         
