@@ -4,4 +4,5 @@
 
 Datasets:
 
-Geração de energia por usina: https://dados.ons.org.br/dataset/geracao-usina-2
+Geração de energia por usina: https://dados.ons.org.br/dataset/geracao-usina-2  
+Caga Energia: https://dados.ons.org.br/dataset/carga-energia
