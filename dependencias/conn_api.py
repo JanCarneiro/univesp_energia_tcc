@@ -1,87 +1,96 @@
-# python3 -m pip install google-auth
-# python3 -m pip install google-api-python-client
-# python3 -m pip install google_auth_oauthlib
-
-# https://developers.google.com/identity?hl=pt-br
-
-import os
-from google.oauth2.credentials import Credentials
+import os.path
+import json
+import pandas as pd
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from googleapiclient.errors import HttpError
 
-# Configure your own credentials
-client_id = ""
-client_secret = ""
-Sourcefilepath = f"/home/jan/Documentos/tcc/datasets/gold/GERACAO_ENERGIA_ANO.csv"
-
-TargetfolderId = '1sjk5kXCE4A2u3T-4bd3PcHVnFLQ8qG2n'
-
-# Define the scope for Google Drive API
 SCOPES = ['https://www.googleapis.com/auth/drive']
+TOKEN_FILE = '/home/jan/Documentos/tcc/secrets/token.json'
 
+def cria_token():
 
-def generate_tokens(client_id, client_secret):
+    creds = None    
+    credentials = '/home/jan/Documentos/tcc/secrets/credentials.json'
 
-    flow = InstalledAppFlow.from_client_config(
-        client_config={
-            "web": {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                #"redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"],
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://accounts.google.com/o/oauth2/token",
-            }
-        },
-        scopes=SCOPES
-    )
-    flow.run_local_server(port=0)
+    if os.path.exists(TOKEN_FILE):
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
-    return flow.credentials.token, flow.credentials.refresh_token
-
-
-def authenticate_with_token(token):
-
-    creds = Credentials.from_authorized_user_info(token)
-    if not creds.valid:
-        if creds.expired and creds.refresh_token:
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                credentials, SCOPES
+            )
+
+            creds = flow.run_local_server(port=0, browser='firefox')
+
+        with open(TOKEN_FILE, "w") as token:
+            token.write(creds.to_json())
+    
     return creds
 
+def get_token_from_json():
 
+    with open(TOKEN_FILE, "r") as tokens:
+        token_dict = tokens.readline()
+        data_dict = json.loads(token_dict)
 
-def upload_file_to_drive(file_path, token, folder_id):
+        token = data_dict['token']
+        refresh_token = data_dict['refresh_token']
 
+        return token, refresh_token
     
-    creds = authenticate_with_token(token)
+
+def insert_file_to_drive(file_path, folder_id, file_name, creds):
+
+    path_files = '/home/jan/Documentos/tcc/secrets/files_id.csv'
+
     service = build('drive', 'v3', credentials=creds)
-    file_name = os.path.basename(file_path)
+
     file_metadata = {
         'name': file_name,
-        'parents': [folder_id]  # Specify the folder ID as the parent ID
-    }
+        'parents': [folder_id]  
+        }
+    
     media = MediaFileUpload(file_path, resumable=True)
-    file = service.files().create(body=file_metadata,
-                                  media_body=media,
-                                  fields='id').execute()
+
+    if not os.path.exists(path_files):
+            with open(path_files, 'w') as ids:
+                header = ['id_file', 'nm_base']
+                ids.write(header[0] + ',' + header[1])
+
+    df = pd.read_csv(path_files, sep=',')
+    qntd_id = df.where(df['nm_base'] == file_name).dropna()
+
+    if int(qntd_id['id_file'].count()) == 0:
+
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id').execute()
     
+        id_file = file.get('id')
+   
+        with open(path_files, 'a') as ids:
+            header = [f'\n{id_file}', f'{file_name}']
+            ids.writelines(header[0] + ',' + header[1])
 
-    print('File ID: %s' % file.get('id'))
+        print(f'Adicionado arquivo {file_name}')
 
+    else:
 
-if __name__ == "__main__":
-  
-    access_token, refresh_token = generate_tokens(client_id, client_secret)
+        id_file = qntd_id['id_file'][int(qntd_id.index[0])]
 
+        file = service.files().update(
+            fileId=id_file,            
+            media_body=media
+            ).execute()
 
-    tokenAuth = {
-        "token": access_token,
-        "refresh_token": refresh_token,
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scopes": SCOPES
-    }
+        print(f'Atualizado arquivo {file_name}')
+
     
-    upload_file_to_drive(Sourcefilepath, tokenAuth, TargetfolderId)
