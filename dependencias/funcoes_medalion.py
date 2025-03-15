@@ -1,4 +1,6 @@
 from datetime import date
+from pyspark.sql import Row
+import pandas as pd
 import requests
 import os
 
@@ -57,3 +59,21 @@ def merge_files(base_url,nm_base, spark):
     combined_df.write.parquet(f"{path_prata}/{nm_base}_consolidada.parquet", mode="overwrite")
     print(f"Criado arquivo: {path_prata}/{nm_base}_consolidada.parquet ")
     return combined_df
+
+
+def extrai_bases_excel(tipo, path, spark):
+    dfs = pd.read_excel(path, sheet_name=f'{tipo}', dtype=str, engine='openpyxl', skiprows=3)
+    dfs = spark.createDataFrame(dfs)
+
+    listas = dfs.filter((dfs['Unnamed: 0'] == 'Sao Paulo') | (dfs['Unnamed: 1'] == 'JAN') | (dfs['Unnamed: 1'] == '2004')).collect()
+
+    tipo = tipo.replace('.', '')
+    tipo = tipo.replace(' ', '_')
+
+    lista = []
+    for ano,mes,totais in zip(listas[0], listas[1], listas[2]):
+
+        lista.append(Row(ano = ano, mes = mes, consumo_total= totais, nm_base = tipo))
+        df = spark.createDataFrame(lista)
+    
+    df.write.parquet(f'/home/jan/Documentos/tcc/datasets/prata/CONSUMO_ENERGIA/{tipo}.parquet', mode="overwrite")
